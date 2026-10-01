@@ -20,6 +20,7 @@ if rawget(_G, MODULE_INTERNALS) then
         'vshard.replicaset', 'vshard.util', 'vshard.service_info',
         'vshard.storage.reload_evolution', 'vshard.registry',
         'vshard.heap', 'vshard.storage.ref', 'vshard.storage.sched',
+        'vshard.storage.call_context',
         'vshard.storage.schema', 'vshard.storage.export_log',
         'vshard.storage.exports', 'vshard.log_ratelimit',
         'vshard.storage.route_dispenser',
@@ -37,6 +38,7 @@ local lregistry = require('vshard.registry')
 local lservice_info = require('vshard.service_info')
 local lratelimit = require('vshard.log_ratelimit')
 local lref = require('vshard.storage.ref')
+local lcall_context = require('vshard.storage.call_context')
 local lsched = require('vshard.storage.sched')
 local lschema = require('vshard.storage.schema')
 local reload_evolution = require('vshard.storage.reload_evolution')
@@ -3463,7 +3465,10 @@ local function storage_call(bucket_id, mode, name, args)
     if not ok_ref then
         return nil, err
     end
+    local context = lcall_context.new('bucket', bucket_id)
+    local previous = lcall_context.enter(context)
     local ok, ret1, ret2, ret3 = local_call(name, args)
+    lcall_context.leave(context, previous)
     if not ok then
         ret1 = lerror.make(ret1)
     end
@@ -3613,7 +3618,10 @@ local function storage_map(rid, name, args)
     if not ok then
         return nil, err
     end
+    local context = lcall_context.new('map')
+    local previous = lcall_context.enter(context)
     ok, res = local_call(name, args)
+    lcall_context.leave(context, previous)
     if not ok then
         lref.del(rid, sid)
         return nil, lerror.make(res)
@@ -4693,6 +4701,7 @@ return {
     --
     master_sync_wakeup = storage_make_api(master_sync_wakeup),
     call = storage_make_api(storage_call),
+    call_context = lcall_context.get,
     _call = storage_make_api(service_call),
     sync = storage_make_api(sync),
     cfg = function(cfg, id) return storage_cfg(cfg, id, false) end,

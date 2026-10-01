@@ -11,6 +11,7 @@ if rawget(_G, MODULE_INTERNALS) then
         'vshard.consts', 'vshard.error', 'vshard.cfg', 'vshard.version',
         'vshard.hash', 'vshard.replicaset', 'vshard.util',
         'vshard.service_info', 'vshard.log_ratelimit',
+        'vshard.router.map_budget',
     }
     for _, module in pairs(vshard_modules) do
         package.loaded[module] = nil
@@ -1123,6 +1124,8 @@ end
 --         into the network anyway.
 --     - bucket_ids - an array of bucket IDs which have to be covered by
 --         Map-Reduce. By default the whole cluster is covered.
+--     - remaining_timeout_arg - an argument position to replace with the
+--         remaining timeout after references have been established.
 --
 -- @return In case of success - a map with replicaset ID (UUID or name) keys and
 --     values being what the function returned from the replicaset.
@@ -1157,8 +1160,11 @@ local function router_map_callrw(router, func, args, opts)
             router_ref_storage_all(router, timeout)
     end
     if timeout then
+        local budget_arg = opts and opts.remaining_timeout_arg
+        local map_args = require('vshard.router.map_budget').prepare(
+            args, timeout, budget_arg)
         map, err, err_id = replicasets_map_reduce(replicasets_to_map, rid, func,
-            args, grouped_args, {
+            map_args, grouped_args, {
                 timeout = timeout, return_raw = do_return_raw
             })
         if map then
